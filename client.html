@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client WebSocket</title>
+</head>
+<body>
+    <h1>Client WebSocket</h1>
+    <input type="text" id="messageInput" placeholder="Entrez un message">
+    <button id="sendButton">Envoyer</button>
+    <div id="messages"></div>
+
+    <script>
+        const socket = new WebSocket('ws://localhost:8080');
+
+        socket.onopen = function() {
+            console.log('Connexion établie avec le serveur');
+        };
+
+        socket.onmessage = function(event) {
+            console.log('Message du serveur :', event.data);
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML += `<p>${event.data}</p>`;
+        };
+
+        socket.onclose = function() {
+            console.log('Connexion fermée');
+        };
+
+        // Récupérer l'input en temps réel
+        const messageInput = document.getElementById('messageInput');
+        messageInput.addEventListener('input', function() {
+            const currentInput = messageInput.value;
+            // Afficher l'input en temps réel
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = `<p>Input en temps réel: ${currentInput}</p>`;
+        });
+
+        document.getElementById('sendButton').onclick = function() {
+            const message = messageInput.value;
+            socket.send(message);
+            messageInput.value = ''; // Effacer le champ d'entrée
+            // Effacer l'affichage de l'input en temps réel
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = ''; // Réinitialiser l'affichage pour le prochain message
+        };
+    </script>
+</body>
+</html>
