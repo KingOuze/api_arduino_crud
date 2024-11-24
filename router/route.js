@@ -73,6 +73,37 @@ router.put('/user/:id/switch-role', isAuthenticated , authorizeAdmin, async (req
     }
 });
 
+// Route pour obtenir les relevés à des heures fixes
+app.get('/mesures/specific-times', async (req, res) => {
+  try {
+    const mesures = await MesureModel.find().sort({ timestamp: -1 });
+
+    // Filtrer les mesures pour obtenir celles à 10h, 14h et 17h
+    const filteredMesures = mesures.filter(mesure => {
+      const mesureDate = new Date(mesure.timestamp);
+      const mesureHeur = mesureDate.getHours();
+      const mesureMin = mesureDate.getMinutes();
+      return (mesureHeur === 10 && mesureMin === 0) || 
+             (mesureHeur === 14 && mesureMin === 0) || 
+             (mesureHeur === 17 && mesureMin === 0);
+    });
+
+    const response = filteredMesures.map(mesure => ({
+      temperature: mesure.temperature,
+      humidity: mesure.humidity,
+      timestamp: mesure.timestamp, // Ou tout autre format que vous souhaitez
+    }));
+
+    res.json({
+      message: 'Mesures récupérées avec succès',
+      data: response,
+    });
+  } catch (err) {
+    console.error('Erreur lors de la récupération des données:', err);
+    res.status(500).json({ message: 'Erreur interne du serveur' });
+  }
+});
+
 // Route pour obtenir l'historique des mesures de la semaine
 app.get('/historique/hebdomadaire', async (req, res) => {
   try {
