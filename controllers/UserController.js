@@ -37,6 +37,7 @@ const storeUser = async (req, res) => {
     let user = new User({
       nom,
       prenom,
+      telephone,
       email,
       password: hashedPassword,
       code,
@@ -103,6 +104,7 @@ const updateUser = async (req, res) => {
   if (req.body.email) fieldsToUpdate.email = req.body.email;
   if (req.body.code) fieldsToUpdate.code = req.body.code;
   if (req.body.role) fieldsToUpdate.role = req.body.role;
+  if (req.body.telephone) fieldsToUpdate.telephone = req.body.telephone;
 
   try {
     const result = await client
@@ -136,7 +138,7 @@ const listArchived = async (req, res) => {
 
 const deleteUser = async (req, res) => {
   try {
-        const userId = req.user.id; 
+        console.log(userId);
         await User.findByIdAndUpdate(userId, { archived: true });
         res.status(200).json({ message: 'Utilisateur archivé avec succès' });
     } catch (error) {

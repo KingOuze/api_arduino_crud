@@ -24,6 +24,7 @@ const {
 
 const isAuthenticated = require("../middlewares/authMiddleware"); // Importation du middleware
 const authorizeAdmin = require("../middlewares/authorized");
+const Mesure = require("../models/Mesure");
 
 const router = express.Router();
 
@@ -31,20 +32,20 @@ const router = express.Router();
 router.route("/auth/login").post(loginUser);
 
 // Gestion des utilisateurs (ajout du middleware d'authentification)
-router.route("/users").post(isAuthenticated, authorizeAdmin, storeUser);
-router.route("/users").get(isAuthenticated, authorizeAdmin, getAllUsers);
-router.route("/user/:id").get(isAuthenticated,authorizeAdmin, findUser);
-router.route("/user/:id").put(isAuthenticated, authorizeAdmin, updateUser);
-router.route("/user/:id/archived").delete(isAuthenticated, authorizeAdmin, deleteUser);
-router.route("/user/:id/unarchived").post(isAuthenticated, authorizeAdmin, desarchivedUser);
-router.route("/users/list-archived").get(isAuthenticated, authorizeAdmin, listArchived);
+router.route("/users").post(storeUser);
+router.route("/users").get( getAllUsers);
+router.route("/user/:id").get(findUser);
+router.route("/user/:id").put(updateUser);
+router.route("/user/:id/archived").delete(deleteUser);
+router.route("/user/:id/unarchived").post(desarchivedUser);
+router.route("/users/list-archived").get(listArchived);
 
 // Route pour récupérer les enregistrements de la semaine courante
-router.get('/records', isAuthenticated, getWeeklyRecords);
-router.post('/records', isAuthenticated, authorizeAdmin, storeRecord);
+//router.get('/records', getWeeklyRecords);
+//router.post('/records', isAuthenticated, authorizeAdmin, storeRecord);
 
 // Route pour changer le rôle
-router.put('/user/:id/switch-role', isAuthenticated , authorizeAdmin, async (req, res) => {
+router.put('/user/:id/switch-role', async (req, res) => {
     const userId = req.params.id;
 
     try {
@@ -75,7 +76,7 @@ router.put('/user/:id/switch-role', isAuthenticated , authorizeAdmin, async (req
 // Route pour obtenir les relevés à des heures fixes
 router.get('/mesures/specific-times', async (req, res) => {
   try {
-    const mesures = await MesureModel.find().sort({ timestamp: -1 });
+    const mesures = await Mesure.find().sort({ timestamp: -1 });
 
     // Filtrer les mesures pour obtenir celles à 10h, 14h et 17h
     const filteredMesures = mesures.filter(mesure => {
@@ -93,7 +94,7 @@ router.get('/mesures/specific-times', async (req, res) => {
       timestamp: mesure.timestamp, // Ou tout autre format que vous souhaitez
     }));
 
-    res.json({
+    res.json.toString({
       message: 'Mesures récupérées avec succès',
       data: response,
     });
@@ -109,7 +110,7 @@ router.get('/historique/hebdomadaire', async (req, res) => {
     const startOfWeek = new Date();
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Commence le lundi
 
-    const mesures = await MesureModel.find({
+    const mesures = await Mesure.find({
       timestamp: { $gte: startOfWeek }
     }).sort({ timestamp: 1 }); // Tri croissant par date
 
@@ -130,16 +131,17 @@ router.get('/historique/hebdomadaire', async (req, res) => {
 });
 
 // Route pour obtenir la température et l'humidité moyennes de la journée
-router.get('/moyennes/jour', async (req, res) => {
+router.get('/moyennes', async (req, res) => {
   try {
     const today = new Date();
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
-    const mesures = await MesureModel.find({
+    const mesures = await Mesure.find({
       timestamp: { $gte: startOfDay, $lte: endOfDay }
     });
 
+    console.log(mesures);
     if (mesures.length === 0) {
       return res.json({
         message: 'Aucune mesure disponible pour aujourd\'hui.',
