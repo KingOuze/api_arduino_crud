@@ -63,6 +63,30 @@ io.on('connection', (socket) => {
     });
 });
 
+// Fonction pour enregistrer les données dans la base de données
+async function saveData() {
+  if (currentData.temperature !== null && currentData.humidity !== null) {
+    const mesure = new MesureModel({
+      temperature: currentData.temperature,
+      humidity: currentData.humidity,
+    });
+
+    try {
+      await mesure.save();
+      console.log('Données enregistrées à', currentData.timestamp);
+    } catch (err) {
+      console.error('Erreur lors de l\'enregistrement des données:', err.message);
+    }
+  }
+}
+
+// Configuration du cron pour enregistrer les données à 10h, 14h et 17h tous les jours
+cron.schedule('0 10,14,17 * * *', () => {
+  console.log('Enregistrement des données à', new Date());
+  saveData();
+});
+
+
 // Lancement du serveur
 server.listen(PORT, () => {
     console.log(`Serveur en cours d'exécution sur le port ${PORT}`);
