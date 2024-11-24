@@ -19,7 +19,6 @@ const {
 const {
   getWeeklyRecords,
   storeRecord,
-  getRecords,
 } = require("../controllers/MesureController");
 
 
@@ -74,7 +73,7 @@ router.put('/user/:id/switch-role', isAuthenticated , authorizeAdmin, async (req
 });
 
 // Route pour obtenir les relevés à des heures fixes
-app.get('/mesures/specific-times', async (req, res) => {
+router.get('/mesures/specific-times', async (req, res) => {
   try {
     const mesures = await MesureModel.find().sort({ timestamp: -1 });
 
@@ -105,7 +104,7 @@ app.get('/mesures/specific-times', async (req, res) => {
 });
 
 // Route pour obtenir l'historique des mesures de la semaine
-app.get('/historique/hebdomadaire', async (req, res) => {
+router.get('/historique/hebdomadaire', async (req, res) => {
   try {
     const startOfWeek = new Date();
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Commence le lundi
@@ -131,7 +130,7 @@ app.get('/historique/hebdomadaire', async (req, res) => {
 });
 
 // Route pour obtenir la température et l'humidité moyennes de la journée
-app.get('/moyennes/jour', async (req, res) => {
+router.get('/moyennes/jour', async (req, res) => {
   try {
     const today = new Date();
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));

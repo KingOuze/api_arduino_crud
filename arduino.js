@@ -5,6 +5,7 @@ const { ReadlineParser } = require('@serialport/parser-readline');
 const http = require('http');
 const cors = require('cors');
 const socketIo = require('socket.io');
+const cron = require('node-cron');
 
 // Configuration
 const PORT = 4000;
