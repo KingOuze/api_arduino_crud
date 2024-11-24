@@ -73,21 +73,65 @@ router.put('/user/:id/switch-role', isAuthenticated , authorizeAdmin, async (req
     }
 });
 
-//Route pour recupérer la moyenne de l'humidité et de la temperature journaliere
-router.get('/moyenne-jounaliere', isAuthenticated, async (req, res) => {
-
+// Route pour obtenir l'historique des mesures de la semaine
+app.get('/historique/hebdomadaire', async (req, res) => {
   try {
-    const allRecords = await getRecords();
-    if (allRecords) {
-        res.json(allRecords);
-    } else {
-        res.status(404).json({ message: 'Les données pour les trois horaires spécifiés ne sont pas toutes présentes.' });
-    }
-  } catch (error) {
-      console.error('Erreur lors de la récupération des données :', error);
-      res.status(500).json({ message: 'Une erreur est survenue lors de la récupération des données.' });
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Commence le lundi
+
+    const mesures = await MesureModel.find({
+      timestamp: { $gte: startOfWeek }
+    }).sort({ timestamp: 1 }); // Tri croissant par date
+
+    const response = mesures.map(mesure => ({
+      date: mesure.timestamp.toLocaleDateString('fr-FR', { weekday: 'long' }), // Récupère le jour de la semaine
+      temperature: mesure.temperature,
+      humidity: mesure.humidity,
+    }));
+
+    res.json({
+      message: 'Historique des mesures récupéré avec succès',
+      data: response,
+    });
+  } catch (err) {
+    console.error('Erreur lors de la récupération de l\'historique des mesures:', err);
+    res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
+
+// Route pour obtenir la température et l'humidité moyennes de la journée
+app.get('/moyennes/jour', async (req, res) => {
+  try {
+    const today = new Date();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+
+    const mesures = await MesureModel.find({
+      timestamp: { $gte: startOfDay, $lte: endOfDay }
+    });
+
+    if (mesures.length === 0) {
+      return res.json({
+        message: 'Aucune mesure disponible pour aujourd\'hui.',
+        averageTemperature: null,
+        averageHumidity: null,
+      });
+    }
+    const totalTemperature = mesures.reduce((sum, mesure) => sum + mesure.temperature, 0);
+    const totalHumidity = mesures.reduce((sum, mesure) => sum + mesure.humidity, 0);
+
+    const averageTemperature = totalTemperature / mesures.length;
+    const averageHumidity = totalHumidity / mesures.length;
+   res.json({
+        message: 'Moyennes calculées avec succès',
+        averageTemperature: averageTemperature,
+        averageHumidity: averageHumidity,
+      });
+    } catch (err) {
+      console.error('Erreur lors de la récupération des moyennes de la journée:', err);
+      res.status(500).json({ message: 'Erreur interne du serveur' });
+    }
+  });
 
 
 /**
