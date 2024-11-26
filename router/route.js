@@ -1,6 +1,8 @@
 const express = require("express");
 const client = require("../db/connect");
 const { ObjectId } = require('mongodb');
+const getWeekHistory = require('../controllers/weekHistoryController');
+const Weekly = require('../models/weekly'); // Modèle Weekly
 
 const {
   storeUser,
@@ -17,8 +19,6 @@ const {
 } = require("../controllers/AuthController");
 
 const {
-  getWeeklyRecords,
-  storeRecord,
 } = require("../controllers/MesureController");
 
 
@@ -76,25 +76,32 @@ router.put('/user/:id/switch-role', async (req, res) => {
 // Route pour obtenir les relevés à des heures fixes
 router.get('/mesures/specific-times', async (req, res) => {
   try {
-    const mesures = await Mesure.find().sort({ timestamp: -1 });
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Début du jour actuel
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1); // Début du jour suivant
+
+    const mesures = await MesureModel.find({
+      timestamp: { $gte: today, $lt: tomorrow },
+    }).sort({ timestamp: 1 });
 
     // Filtrer les mesures pour obtenir celles à 10h, 14h et 17h
-    const filteredMesures = mesures.filter(mesure => {
-      const mesureDate = new Date(mesure.timestamp);
-      const mesureHeur = mesureDate.getHours();
-      const mesureMin = mesureDate.getMinutes();
-      return (mesureHeur === 10 && mesureMin === 0) || 
-             (mesureHeur === 14 && mesureMin === 0) || 
-             (mesureHeur === 17 && mesureMin === 0);
-    });
+    const fixedHours = [10, 14, 17];
+    const filteredMesures = fixedHours.map(hour => {
+      return mesures.find(mesure => {
+        const mesureDate = new Date(mesure.timestamp);
+        return mesureDate.getHours() === hour && mesureDate.getMinutes() === 0;
+      });
+    }).filter(Boolean); // Retirer les valeurs undefined si aucune mesure n'existe pour une heure donnée
 
     const response = filteredMesures.map(mesure => ({
       temperature: mesure.temperature,
       humidity: mesure.humidity,
-      timestamp: mesure.timestamp, // Ou tout autre format que vous souhaitez
+      timestamp: mesure.timestamp,
     }));
 
-    res.json.toString({
+    res.json({
       message: 'Mesures récupérées avec succès',
       data: response,
     });
@@ -104,32 +111,85 @@ router.get('/mesures/specific-times', async (req, res) => {
   }
 });
 
-// Route pour obtenir l'historique des mesures de la semaine
-router.get('/historique/hebdomadaire', async (req, res) => {
+//recupération des temperatures par rapport au date données
+router.get('/average/:date', async (req, res) => {
   try {
-    const startOfWeek = new Date();
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Commence le lundi
+    const dateParam = req.params.date;  // La date passée en paramètre sous le format YYYY-MM-DD
 
-    const mesures = await Mesure.find({
-      timestamp: { $gte: startOfWeek }
-    }).sort({ timestamp: 1 }); // Tri croissant par date
+    // Utiliser la méthode statique `calculateDailyAverage` pour obtenir la moyenne des températures
+    const averageTemperature = await Mesure.calculateDailyAverage(dateParam);
 
-    const response = mesures.map(mesure => ({
-      date: mesure.timestamp.toLocaleDateString('fr-FR', { weekday: 'long' }), // Récupère le jour de la semaine
-      temperature: mesure.temperature,
-      humidity: mesure.humidity,
-    }));
+    if (averageTemperature === null) {
+      return res.status(404).json({ message: 'Aucune donnée disponible pour cette date.' });
+    }
 
-    res.json({
-      message: 'Historique des mesures récupéré avec succès',
-      data: response,
+    // Filtrer les températures pour la même date pour obtenir la moyenne de l'humidité également
+    const startOfDay = new Date(dateParam);
+    startOfDay.setHours(0, 0, 0, 0); // Début de la journée (minuit)
+    
+    const endOfDay = new Date(dateParam);  // Fin de la journée (23h59)
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Récupérer toutes les températures pour cette date afin de calculer l'humidité moyenne
+    const temperatures = await Mesure.find({
+      date: { $gte: startOfDay, $lte: endOfDay }
     });
-  } catch (err) {
-    console.error('Erreur lors de la récupération de l\'historique des mesures:', err);
-    res.status(500).json({ message: 'Erreur interne du serveur' });
+
+    const averageHumidity = temperatures.reduce((acc, temp) => acc + temp.humidity, 0) / temperatures.length;
+
+    return res.status(200).json({
+      date: dateParam,
+      averageTemperature: averageTemperature,
+      averageHumidity: averageHumidity
+    });
+
+  } catch (error) {
+    console.error('Erreur lors du calcul de la moyenne :', error);
+    res.status(500).json({ message: 'Erreur interne du serveur.' });
   }
 });
 
+
+
+ // Route pour lister l'historique des températures et humidités
+ router.get('/temperatures/historique', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query; // Récupérer les éventuels filtres
+
+    let filter = {}; // Filtre vide par défaut
+    if (startDate || endDate) {
+      filter.date = {};
+      if (startDate) filter.date.$gte = new Date(startDate);
+      if (endDate) filter.date.$lte = new Date(endDate);
+    }
+
+    // Récupérer et trier les données
+    const temperatures = await Mesure.find(filter).sort({ date: -1 });
+
+    // Retourner les données sous forme de JSON
+    res.status(200).json(temperatures);
+  } catch (error) {
+    console.error('Erreur lors de la récupération de l\'historique :', error);
+    res.status(500).json({ message: 'Erreur lors de la récupération de l\'historique', error: error.message });
+  }
+});
+
+router.get('/temperatures/historique-semaine', async (req, res) => {
+  try {
+    // Récupérer les données de la collection Weekly
+    const weeklyData = await Weekly.find().sort({ date: 1 }); // Trier par date croissante (lundi -> dimanche)
+
+    if (!weeklyData || weeklyData.length === 0) {
+      return res.status(404).json({ message: 'Aucune donnée hebdomadaire disponible.' });
+    }
+
+    // Retourner les données organisées par jour
+    res.status(200).json(weeklyData);
+  } catch (error) {
+    console.error('Erreur lors de la récupération de l\'historique hebdomadaire :', error);
+    res.status(500).json({ message: 'Erreur lors de la récupération de l\'historique hebdomadaire', error: error.message });
+  }
+});
 // Route pour obtenir la température et l'humidité moyennes de la journée
 router.get('/moyennes', async (req, res) => {
   try {
@@ -166,6 +226,9 @@ router.get('/moyennes', async (req, res) => {
   });
 
 
+  
+
+  
 /**
  * Route pour la déconnexion de l'utilisateur
  */

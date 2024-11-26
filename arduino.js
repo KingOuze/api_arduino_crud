@@ -1,94 +1,64 @@
-// server.js
-const express = require('express');
-const { SerialPort } = require('serialport');
+const WebSocket = require('ws');
+const {SerialPort} = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
-const http = require('http');
-const cors = require('cors');
-const socketIo = require('socket.io');
-const cron = require('node-cron');
 
-// Configuration
-const PORT = 4000;
-const SERIAL_PORT = '/dev/ttyUSB0'; // Adjust based on your Arduino's port
-const BAUD_RATE = 9600;
-
-// Initialisation
-const app = express();
-const server = http.createServer(app);
-const io = socketIo(server, { cors: { origin: '*' } });
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Communication avec l'Arduino
-const serialPort = new SerialPort({ 
-    path: SERIAL_PORT,
-    baudRate: BAUD_RATE 
+// Configuration du port série pour lire les données de l'Arduino
+const port = new SerialPort({
+  path: '/dev/ttyACM1',
+  baudRate: 9600 
 });
-const parser = serialPort.pipe(new ReadlineParser({ delimiter: '\r\n' }));
+const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
-// Gestion des données Arduino
-parser.on('data', (data) => {
-    try {
-        const parsedData = JSON.parse(data);
-        console.log('Données Arduino:', parsedData);
+// Création du serveur WebSocket
+const wss = new WebSocket.Server({ port: 8080 });
 
-        // Identify data type (keypad or sensor) and emit events
-        if (parsedData.type === 'keypad') {
-            io.emit('keypad-data', parsedData.value); // Send keypad data to frontend
-        } else if (parsedData.type === 'sensor') {
-            io.emit('sensor-data', { 
-                temperature: parsedData.temperature, 
-                humidity: parsedData.humidity 
-            }); // Send temperature and humidity to frontend
+wss.on('connection', ws => {
+  console.log('Client connecté');
+
+  // Envoi d'un message de bienvenue au client
+  ws.send(JSON.stringify({ message: 'Connexion établie' }));
+
+  // Gestion des messages envoyés par le client (si nécessaire)
+  ws.on('message', message => {
+    console.log('Message reçu du client:', message);
+  });
+
+  // Lorsque le client se déconnecte
+  ws.on('close', () => {
+    console.log('Client déconnecté');
+  });
+});
+
+// Lire les données du port série et les transmettre aux clients WebSocket
+parser.on('data', line => {
+  try {
+    const jsonData = JSON.parse(line); // Parser les données JSON envoyées par l'Arduino
+    console.log('Données reçues de l\'Arduino:', jsonData);
+
+    // En fonction du type de données, envoyer à tous les clients connectés
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        if (jsonData.type === 'sensor') {
+          // Envoi des données de capteur (température et humidité)
+          client.send(JSON.stringify({
+            type: 'sensor',
+            temperature: jsonData.temperature,
+            humidity: jsonData.humidity
+          }));
+        } else if (jsonData.type === 'keypad') {
+          console.log(JSON.stringify(jsonData.value));
+          // Envoi des données du clavier (touche pressée)
+          client.send(JSON.stringify({
+            type: 'keypad',
+            value: jsonData.value
+          }));
         }
-    } catch (err) {
-        console.error('Erreur de parsing:', err);
-    }
-});
-
-// Gestion des commandes du frontend
-io.on('connection', (socket) => {
-    console.log('Client connecté');
-
-    socket.on('fan-control', (command) => {
-        console.log('Commande reçue:', command);
-
-        // Commande à envoyer à l'Arduino
-        if (command === 'on') {
-            serialPort.write('1');
-        } else if (command === 'off') {
-            serialPort.write('0');
-        }
+      }
     });
-});
-
-// Fonction pour enregistrer les données dans la base de données
-async function saveData() {
-  if (currentData.temperature !== null && currentData.humidity !== null) {
-    const mesure = new MesureModel({
-      temperature: currentData.temperature,
-      humidity: currentData.humidity,
-    });
-
-    try {
-      await mesure.save();
-      console.log('Données enregistrées à', currentData.timestamp);
-    } catch (err) {
-      console.error('Erreur lors de l\'enregistrement des données:', err.message);
-    }
+  } catch (err) {
+    console.error('Erreur de parsing JSON:', err);
   }
-}
-
-// Configuration du cron pour enregistrer les données à 10h, 14h et 17h tous les jours
-cron.schedule('0 10,14,17 * * *', () => {
-  console.log('Enregistrement des données à', new Date());
-  saveData();
 });
 
 
-// Lancement du serveur
-server.listen(PORT, () => {
-    console.log(`Serveur en cours d'exécution sur le port ${PORT}`);
-});
+console.log('Serveur WebSocket en écoute sur ws://localhost:8080');

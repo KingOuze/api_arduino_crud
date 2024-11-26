@@ -88,4 +88,7 @@ async function getRecords() {
     }
 }
 
-module.exports = { getWeeklyRecords, storeRecord , getRecords};
+
+
+  
+module.exports = { getWeeklyRecords, storeRecord , getRecords };

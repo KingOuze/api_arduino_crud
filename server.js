@@ -1,4 +1,3 @@
-// server.js
 require('dotenv').config();
 const express = require('express');
 const cookieParser = require('cookie-parser');
@@ -110,4 +109,3 @@ function controlVentilation(state) {
 
 // Start Express Server
 app.listen(PORT, () => console.log(`Serveur démarré sur le port ${PORT}`));
-

@@ -137,6 +137,7 @@ const listArchived = async (req, res) => {
 }
 
 const deleteUser = async (req, res) => {
+  const userId = req.params.id; // Vous pouvez obtenir l'ID de l'utilisateur à partir du token JWT ou de la session
   try {
         console.log(userId);
         await User.findByIdAndUpdate(userId, { archived: true });
