@@ -95,7 +95,7 @@ function broadcastToClients(wss, data) {
 // Ventilation Control
 let fanState = false;
 function controlVentilation(state) {
-  const command = state ? 'VENT:ON' : 'VENT:OFF';
+  const command = state ? 'FAN_OFF' : 'FAN_ON';
   serialPort.write(`${command}\n`, (err) => {
     if (err) {
       console.error('Erreur lors de l’écriture sur le port série:', err);

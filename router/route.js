@@ -1,7 +1,6 @@
 const express = require("express");
 const client = require("../db/connect");
 const { ObjectId } = require('mongodb');
-const getWeekHistory = require('../controllers/weekHistoryController');
 const Weekly = require('../models/weekly'); // Modèle Weekly
 
 const {
@@ -74,6 +73,7 @@ router.put('/user/:id/switch-role', async (req, res) => {
 });
 
 // Route pour obtenir les relevés à des heures fixes
+// Route pour obtenir les relevés à des heures fixes
 router.get('/mesures/specific-times', async (req, res) => {
   try {
     const today = new Date();
@@ -82,24 +82,33 @@ router.get('/mesures/specific-times', async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1); // Début du jour suivant
 
-    const mesures = await MesureModel.find({
-      timestamp: { $gte: today, $lt: tomorrow },
+    const mesures = await Mesure.find({
+      date: { $gte: today, $lt: tomorrow },
     }).sort({ timestamp: 1 });
+ 
+    console.log(mesures)
+    // Horaires fixes à rechercher
+    const fixedTimes = [
+      { hour: 18, minute: 39 },
+      { hour: 18, minute: 40 },
+      { hour: 18, minute: 41 },
+    ];
 
-    // Filtrer les mesures pour obtenir celles à 10h, 14h et 17h
-    const fixedHours = [10, 14, 17];
-    const filteredMesures = fixedHours.map(hour => {
-      return mesures.find(mesure => {
-        const mesureDate = new Date(mesure.timestamp);
-        return mesureDate.getHours() === hour && mesureDate.getMinutes() === 0;
+    // Associer chaque horaire à une mesure ou `null`
+    const response = fixedTimes.map(({ hour, minute }) => {
+      const mesure = mesures.find(mesure => {
+        const mesureDate = new Date(mesure.date);
+        return (
+          mesureDate.getHours() === hour &&
+          mesureDate.getMinutes() === minute
+        );
       });
-    }).filter(Boolean); // Retirer les valeurs undefined si aucune mesure n'existe pour une heure donnée
-
-    const response = filteredMesures.map(mesure => ({
-      temperature: mesure.temperature,
-      humidity: mesure.humidity,
-      timestamp: mesure.timestamp,
-    }));
+      return {
+        time: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
+        temperature: mesure ? mesure.temperature : null,
+        humidity: mesure ? mesure.humidity : null,
+      };
+    });
 
     res.json({
       message: 'Mesures récupérées avec succès',
@@ -110,6 +119,8 @@ router.get('/mesures/specific-times', async (req, res) => {
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
+
+
 
 //recupération des temperatures par rapport au date données
 router.get('/average/:date', async (req, res) => {
