@@ -1,7 +1,7 @@
 const express = require("express");
 const client = require("../db/connect");
 const { ObjectId } = require('mongodb');
-const Weekly = require('../models/weekly'); // Modèle Weekly
+const Config = require('../models/Config'); // Modèle Weekly
 
 const {
   storeUser,
@@ -73,46 +73,46 @@ router.put('/user/:id/switch-role', async (req, res) => {
 });
 
 // Route pour obtenir les relevés à des heures fixes
-// Route pour obtenir les relevés à des heures fixes
 router.get('/mesures/specific-times', async (req, res) => {
   try {
+    const config = await Config.findOne();
+
+    if (!config) {
+      return res.status(404).json({ message: 'Configuration des heures introuvable' });
+    }
+
+    const { hours, minutes } = config;
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Début du jour actuel
+    today.setHours(0, 0, 0, 0);
 
     const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1); // Début du jour suivant
+    tomorrow.setDate(today.getDate() + 1);
 
     const mesures = await Mesure.find({
       date: { $gte: today, $lt: tomorrow },
     }).sort({ timestamp: 1 });
- 
-    console.log(mesures)
-    // Horaires fixes à rechercher
-    const fixedTimes = [
-      { hour: 18, minute: 39 },
-      { hour: 18, minute: 40 },
-      { hour: 18, minute: 41 },
-    ];
 
-    // Associer chaque horaire à une mesure ou `null`
-    const response = fixedTimes.map(({ hour, minute }) => {
-      const mesure = mesures.find(mesure => {
-        const mesureDate = new Date(mesure.date);
-        return (
-          mesureDate.getHours() === hour &&
-          mesureDate.getMinutes() === minute
-        );
+    const filteredMesures = [];
+
+    hours.forEach(hour => {
+      minutes.forEach(minute => {
+        const mesure = mesures.find(m => {
+          const mesureDate = new Date(m.date);
+          return mesureDate.getHours() === parseInt(hour, 10) && mesureDate.getMinutes() === parseInt(minute, 10);
+        });
+        if (mesure) {
+          filteredMesures.push({
+            temperature: mesure.temperature,
+            humidity: mesure.humidity,
+            date: mesure.date,
+          });
+        }
       });
-      return {
-        time: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
-        temperature: mesure ? mesure.temperature : null,
-        humidity: mesure ? mesure.humidity : null,
-      };
     });
 
     res.json({
       message: 'Mesures récupérées avec succès',
-      data: response,
+      data: filteredMesures,
     });
   } catch (err) {
     console.error('Erreur lors de la récupération des données:', err);
@@ -236,7 +236,40 @@ router.get('/moyennes', async (req, res) => {
     }
   });
 
-
+  router.post('/configure-times', async (req, res) => {
+    const { hours, minutes } = req.body;
+  
+    if (!Array.isArray(hours) || !Array.isArray(minutes)) {
+      return res.status(400).json({ message: 'Format invalide pour les heures ou minutes' });
+    }
+  
+    try {
+      const updatedConfig = await Config.findOneAndUpdate(
+        {},  
+        { hours, minutes },
+        { new: true, upsert: true }
+      );
+  
+      return res.status(200).json({
+        message: 'Configuration mise à jour',
+        configuredTimes: updatedConfig
+      });
+    } catch (error) {
+      return res.status(500).json({ message: 'Erreur lors de la mise à jour', error });
+    }
+  });
+  
+  router.get('/configure-times', async (req, res) => {
+    try {
+      const config = await Config.findOne({});  
+      if (!config) {
+        return res.status(404).json({ message: 'Configuration non trouvée' });
+      }
+      return res.status(200).json(config);
+    } catch (error) {
+      return res.status(500).json({ message: 'Erreur lors de la récupération des configurations', error });
+    }
+  });
   
 
   

@@ -95,6 +95,8 @@ const {SerialPort} = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 const cron = require('node-cron');
 const Mesure = require('./models/Mesure');
+const Config = require('./models/Config');
+
 
 // Configuration du port série pour lire les données de l'Arduino
 const port = new SerialPort({
@@ -105,6 +107,9 @@ const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
 // Création du serveur WebSocket
 const wss = new WebSocket.Server({ port: 8080 });
+
+let latestData = null;
+let isSaving = false;
 
 wss.on('connection', ws => {
   console.log('Client connecté');
@@ -150,12 +155,15 @@ ws.on('message', message => {
   });
 });
 
+
 // Lire les données du port série et les transmettre aux clients WebSocket
 parser.on('data', line => {
+  
   try {
     const jsonData = JSON.parse(line); // Parser les données JSON envoyées par l'Arduino
    console.log('Données reçues de l\'Arduino:', jsonData);
 
+   latestData = jsonData;
     // En fonction du type de données, envoyer à tous les clients connectés
     /*wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
@@ -189,33 +197,88 @@ parser.on('data', line => {
         }
       
     });
-    cron.schedule('39,40,41 18 * * *', () => {
-      //console.log('Enregistrement des données à', new Date());
-      saveData(); // Fonction que vous avez déjà pour enregistrer les mesures
-    });
-  
-  
-  // Fonction pour enregistrer les données dans la base de données
-  async function saveData() {
-    if (jsonData.temperature !== null && jsonData.humidity !== null) {
-      const mesure = new Mesure({
-        temperature: jsonData.temperature,
-        humidity: jsonData.humidity,
-      });
-      console.log(mesure);
-      try {
-        await mesure.save();
-        console.log('Données enregistrées à', Date.now());
-      } catch (err) {
-        console.error('Erreur lors de l\'enregistrement des données:', err.message);
-      }
-    }
+
+   
   }
-  } catch (err) {
-    console.error('Erreur de parsing JSON:', err);
+  catch (err) {
+    console.error('Erreur lors de la conversion du JSON:', err);
   }
 
+
+ 
 });
+
+
+async function saveData() {
+  if (isSaving) {
+    console.log('Enregistrement déjà en cours, en attente...');
+    return; // Ignore si une tâche est déjà en cours
+  }
+
+  isSaving = true; // Marque l'état comme "en cours"
+
+  try {
+    if (latestData && latestData.temperature !== null && latestData.humidity !== null) {
+      const mesure = new Mesure({
+        temperature: latestData.temperature,
+        humidity: latestData.humidity
+      });
+
+      await mesure.save();
+      console.log('Données enregistrées avec succès');
+    } else {
+      console.error('Données invalides ou inexistantes');
+    }
+  } catch (err) {
+    console.error('Erreur lors de l\'enregistrement des données:', err.message);
+  } finally {
+    isSaving = false; // Réinitialise le verrou une fois terminé
+  }
+}
+
+
+async function configureCronJobs() {
+  try {
+    const config = await Config.findOne();
+
+    if (config) {
+      const { hours, minutes } = config;
+
+      // Supprimez les doublons dans les heures et minutes
+      const uniqueHours = [...new Set(hours)];
+      const uniqueMinutes = [...new Set(minutes)];
+
+      // Arrêtez toutes les tâches cron existantes avant de reconfigurer
+      cron.getTasks().forEach((task) => task.stop());
+
+      uniqueHours.forEach((hour) => {
+        uniqueMinutes.forEach((minute) => {
+          const cronExpression = `${minute} ${hour} * * *`;
+          
+          // Créez une tâche cron pour chaque combinaison unique
+          cron.schedule(cronExpression, () => {
+            console.log(`Enregistrement des données à ${hour}:${minute}`);
+            saveData(); // Appel de la fonction d'enregistrement
+          });
+        });
+      });
+
+      console.log('Les tâches cron ont été reconfigurées avec succès.');
+    } else {
+      console.error('Aucune configuration trouvée dans la base de données.');
+    }
+  } catch (err) {
+    console.error('Erreur lors de la reconfiguration des tâches cron:', err);
+  }
+}
+
+
+  configureCronJobs();
+
+
+
+
+
 
 parser.on('control_fan', () => {
   const command = state ? 'FAN_OFF' : 'FAN_ON';
