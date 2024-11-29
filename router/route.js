@@ -90,7 +90,7 @@ router.get('/mesures/specific-times', async (req, res) => {
 
     const mesures = await Mesure.find({
       date: { $gte: today, $lt: tomorrow },
-    }).sort({ timestamp: 1 });
+    }).sort({ date: 1 });
 
     const filteredMesures = [];
 
@@ -188,7 +188,7 @@ router.get('/average/:date', async (req, res) => {
 router.get('/temperatures/historique-semaine', async (req, res) => {
   try {
     // Récupérer les données de la collection Weekly
-    const weeklyData = await Weekly.find().sort({ date: 1 }); // Trier par date croissante (lundi -> dimanche)
+    const weeklyData = await Mesure.find().sort({ date: 1 }); // Trier par date croissante (lundi -> dimanche)
 
     if (!weeklyData || weeklyData.length === 0) {
       return res.status(404).json({ message: 'Aucune donnée hebdomadaire disponible.' });

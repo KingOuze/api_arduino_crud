@@ -283,7 +283,6 @@ configureCronJobs();
 
 
 
-
 parser.on('control_fan', () => {
 const command = state ? 'FAN_OFF' : 'FAN_ON';
 SerialPort.write(`${command}\n`, (err) => {
