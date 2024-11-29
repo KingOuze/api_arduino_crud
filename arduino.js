@@ -103,6 +103,7 @@ const port = new SerialPort({
   path: '/dev/ttyACM0',
   baudRate: 9600 
 });
+
 const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
 // Création du serveur WebSocket
@@ -114,11 +115,11 @@ let isSaving = false;
 wss.on('connection', ws => {
   console.log('Client connecté');
 
-  // Envoi d'un message de bienvenue au client
-  ws.send(JSON.stringify({ message: 'Connexion établie' }));
+
+ws.send(JSON.stringify({ message: 'Connexion établie' }));
 
 
-  // Gestion des messages envoyés par le client (si nécessaire)
+// Gestion des messages envoyés par le client (si nécessaire)
 ws.on('message', message => {
   if (Buffer.isBuffer(message)) {
     message = message.toString();
@@ -136,144 +137,147 @@ ws.on('message', message => {
       }
     });
   } else if (message === 'false') {
-    port.write('FAN_OFF\n', (err) => {
-      if (err) {
-        console.error('Erreur lors de l’écriture sur le port série:', err);
-      } else {
-        console.log('Commande envoyée : FAN_OFF');
-      }
-    });
-  } else {
-    console.log('Message invalide reçu:', message);
-  }
-});
+      port.write('FAN_OFF\n', (err) => {
+        if (err) {
+          console.error('Erreur lors de l’écriture sur le port série:', err);
+        } else {
+          console.log('Commande envoyée : FAN_OFF');
+        }
+      });
+    } else {
+      console.log('Message invalide reçu:', message);
+    }
+
+})
+
+
 
 
   // Lorsque le client se déconnecte
   ws.on('close', () => {
     console.log('Client déconnecté');
   });
-});
 
+});
 
 // Lire les données du port série et les transmettre aux clients WebSocket
 parser.on('data', line => {
-  
-  try {
-    const jsonData = JSON.parse(line); // Parser les données JSON envoyées par l'Arduino
-   console.log('Données reçues de l\'Arduino:', jsonData);
 
-   latestData = jsonData;
-    // En fonction du type de données, envoyer à tous les clients connectés
-    /*wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        if (jsonData.type === 'sensor') {
-          // Envoi des données de capteur (température et humidité)
-          client.send(JSON.stringify({
-            type: 'sensor',
-            temperature: jsonData.temperature,
-            humidity: jsonData.humidity
-          }));
-        } else if (jsonData.type === 'keypad') {
-          console.log(JSON.stringify(jsonData.value));
-          // Envoi des données du clavier (touche pressée)
-          client.send(JSON.stringify({
-            type: 'keypad',
-            value: jsonData.value
-          }));
-        }
+try {
+  const jsonData = JSON.parse(line); // Parser les données JSON envoyées par l'Arduino
+ console.log('Données reçues de l\'Arduino:', jsonData);
+
+ latestData = jsonData;
+  // En fonction du type de données, envoyer à tous les clients connectés
+  /*wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      if (jsonData.type === 'sensor') {
+        // Envoi des données de capteur (température et humidité)
+        client.send(JSON.stringify({
+          type: 'sensor',
+          temperature: jsonData.temperature,
+          humidity: jsonData.humidity
+        }));
+      } else if (jsonData.type === 'keypad') {
+        console.log(JSON.stringify(jsonData.value));
+        // Envoi des données du clavier (touche pressée)
+        client.send(JSON.stringify({
+          type: 'keypad',
+          value: jsonData.value
+        }));
       }
-    });*/
+    }
+  });*/
 
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
 
-          // Envoi des données de capteur (température et humidité)
-          client.send(JSON.stringify({
-            type: 'sensor',
-            temperature: jsonData.temperature,
-            humidity: jsonData.humidity
-          }));
-        }
-      
-    });
-
-   
-  }
-  catch (err) {
-    console.error('Erreur lors de la conversion du JSON:', err);
-  }
-
+        // Envoi des données de capteur (température et humidité)
+        client.send(JSON.stringify({
+          type: 'sensor',
+          temperature: jsonData.temperature,
+          humidity: jsonData.humidity
+        }));
+      }
+    
+  });
 
  
+}
+catch (err) {
+  console.error('Erreur lors de la conversion du JSON:', err);
+}
+
+
+
 });
 
 
 async function saveData() {
-  if (isSaving) {
-    console.log('Enregistrement déjà en cours, en attente...');
-    return; // Ignore si une tâche est déjà en cours
+if (isSaving) {
+  console.log('Enregistrement déjà en cours, en attente...');
+  return; // Ignore si une tâche est déjà en cours
+}
+
+isSaving = true; // Marque l'état comme "en cours"
+
+try {
+  if (latestData && latestData.temperature !== null && latestData.humidity !== null) {
+    const mesure = new Mesure({
+      temperature: latestData.temperature,
+      humidity: latestData.humidity
+    });
+
+    await mesure.save();
+    console.log('Données enregistrées avec succès');
+  } else {
+    console.error('Données invalides ou inexistantes');
   }
-
-  isSaving = true; // Marque l'état comme "en cours"
-
-  try {
-    if (latestData && latestData.temperature !== null && latestData.humidity !== null) {
-      const mesure = new Mesure({
-        temperature: latestData.temperature,
-        humidity: latestData.humidity
-      });
-
-      await mesure.save();
-      console.log('Données enregistrées avec succès');
-    } else {
-      console.error('Données invalides ou inexistantes');
-    }
-  } catch (err) {
-    console.error('Erreur lors de l\'enregistrement des données:', err.message);
-  } finally {
-    isSaving = false; // Réinitialise le verrou une fois terminé
-  }
+} catch (err) {
+  console.error('Erreur lors de l\'enregistrement des données:', err.message);
+} finally {
+  isSaving = false; // Réinitialise le verrou une fois terminé
+}
 }
 
 
 async function configureCronJobs() {
-  try {
-    const config = await Config.findOne();
+try {
+  const config = await Config.findOne();
 
-    if (config) {
-      const { hours, minutes } = config;
+  if (config) {
+    const { hours, minutes } = config;
 
-      // Supprimez les doublons dans les heures et minutes
-      const uniqueHours = [...new Set(hours)];
-      const uniqueMinutes = [...new Set(minutes)];
+    // Supprimez les doublons dans les heures et minutes
+    const uniqueHours = [...new Set(hours)];
+    const uniqueMinutes = [...new Set(minutes)];
 
-      // Arrêtez toutes les tâches cron existantes avant de reconfigurer
-      cron.getTasks().forEach((task) => task.stop());
+    // Arrêtez toutes les tâches cron existantes avant de reconfigurer
+    cron.getTasks().forEach((task) => task.stop());
 
-      uniqueHours.forEach((hour) => {
-        uniqueMinutes.forEach((minute) => {
-          const cronExpression = `${minute} ${hour} * * *`;
-          
-          // Créez une tâche cron pour chaque combinaison unique
-          cron.schedule(cronExpression, () => {
-            console.log(`Enregistrement des données à ${hour}:${minute}`);
-            saveData(); // Appel de la fonction d'enregistrement
-          });
+    uniqueHours.forEach((hour) => {
+      uniqueMinutes.forEach((minute) => {
+        const cronExpression = `${minute} ${hour} * * *`;
+        
+        // Créez une tâche cron pour chaque combinaison unique
+        cron.schedule(cronExpression, () => {
+          console.log(`Enregistrement des données à ${hour}:${minute}`);
+          saveData(); // Appel de la fonction d'enregistrement
         });
       });
+    });
 
-      console.log('Les tâches cron ont été reconfigurées avec succès.');
-    } else {
-      console.error('Aucune configuration trouvée dans la base de données.');
-    }
-  } catch (err) {
-    console.error('Erreur lors de la reconfiguration des tâches cron:', err);
+    console.log('Les tâches cron ont été reconfigurées avec succès.');
+  } else {
+    console.error('Aucune configuration trouvée dans la base de données.');
   }
+} catch (err) {
+  console.error('Erreur lors de la reconfiguration des tâches cron:', err);
+}
 }
 
 
-  configureCronJobs();
+configureCronJobs();
 
 
 
@@ -281,15 +285,15 @@ async function configureCronJobs() {
 
 
 parser.on('control_fan', () => {
-  const command = state ? 'FAN_OFF' : 'FAN_ON';
-  SerialPort.write(`${command}\n`, (err) => {
-      if (err) {
-        console.error('Erreur lors de l’écriture sur le port série:', err);
-      } else {
-        fanState = state;
-        console.log(`Commande envoyée : ${command}`);
-      }
-  });
+const command = state ? 'FAN_OFF' : 'FAN_ON';
+SerialPort.write(`${command}\n`, (err) => {
+    if (err) {
+      console.error('Erreur lors de l’écriture sur le port série:', err);
+    } else {
+      fanState = state;
+      console.log(`Commande envoyée : ${command}`);
+    }
+});
 });
 
 

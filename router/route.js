@@ -209,10 +209,9 @@ router.get('/moyennes', async (req, res) => {
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
     const mesures = await Mesure.find({
-      timestamp: { $gte: startOfDay, $lte: endOfDay }
+      date: { $gte: startOfDay, $lte: endOfDay }
     });
 
-    console.log(mesures);
     if (mesures.length === 0) {
       return res.json({
         message: 'Aucune mesure disponible pour aujourd\'hui.',

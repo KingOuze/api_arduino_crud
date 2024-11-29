@@ -35,76 +35,63 @@ connect(process.env.MONGO_URI, (err) => {
   }
 });
 
-/*// WebSocket Setup
-const wss = new WebSocket.Server({ port: 8080 });
-const wssKey = new WebSocket.Server({ port: 8000 });
+const WebSocket = require('ws');
+const {SerialPort} = require('serialport');
+const { ReadlineParser } = require('@serialport/parser-readline');
 
-wss.on('connection', (ws) => console.log('Client WebSocket connecté'));
-wssKey.on('connection', (ws) => console.log('Client WebSocket Keypad connecté'));
-
-// SerialPort Setup
-const serialPort = new SerialPort({
-  path: process.env.SERIAL_PORT || '/dev/ttyUSB0',
-  baudRate: 9600,
+// Configuration du port série pour lire les données de l'Arduino
+const port = new SerialPort({
+  path: '/dev/ttyACM1',
+  baudRate: 9600 
 });
-const parser = serialPort.pipe(new ReadlineParser({ delimiter: '\n' }));
+const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
-// Serial Data Handling
-parser.on('data', (data) => {
-  const parsedData = parseArduinoData(data);
-  if (parsedData) handleParsedData(parsedData);
+// Création du serveur WebSocket
+const wss = new WebSocket.Server({ port: 8000 });
+
+wss.on('connection', ws => {
+  console.log('Client connecté');
+
+  // Envoi d'un message de bienvenue au client
+  ws.send(JSON.stringify({ message: 'Connexion établie' }));
+
+
+
+
+  // Lorsque le client se déconnecte
+  ws.on('close', () => {
+    console.log('Client déconnecté');
+  });
+
+
+ 
 });
 
-// Parse Arduino Data
-function parseArduinoData(data) {
-  try {
-    if (data.startsWith('TEMP')) {
-      const match = data.match(/TEMP:(\d+(\.\d+)?),HUM:(\d+(\.\d+)?)/);
-      if (match) return { type: 'sensor', temperature: parseFloat(match[1]), humidity: parseFloat(match[3]) };
-    } else if (data.startsWith('KEY:')) {
-      const match = data.match(/KEY:(.)/);
-      if (match) return { type: 'keypad', key: match[1] };
-    }
-  } catch (err) {
-    console.error('Erreur d’analyse des données:', err);
-  }
-  return null;
-}
+ // Lire les données du port série et les transmettre aux clients WebSocket
+ parser.on('data', line => {
+    try {
+      const jsonData = line; // Parser les données JSON envoyées par l'Arduino
+      console.log('Données reçues de l\'Arduino:', jsonData);
+          // Envoi des données du clavier (touche pressée)
+          wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {  // Vérifier si le client est connecté
+              client.send(JSON.stringify({
+                type: 'keypad',
+                value: jsonData
+              }
+            ));
+         
+            }
+          });
+        
+      } catch (e) {
+          console.error('Erreur lors du parsing des données JSON:', e);
+      }
+  })
+  
 
-// Handle Parsed Data
-function handleParsedData(parsedData) {
-  if (parsedData.type === 'sensor') {
-    console.log(`Température : ${parsedData.temperature}°C, Humidité : ${parsedData.humidity}%`);
-    broadcastToClients(wss, { temperature: parsedData.temperature, humidity: parsedData.humidity });
-  } else if (parsedData.type === 'keypad') {
-    console.log(`Touche du keypad pressée : ${parsedData.key}`);
-    broadcastToClients(wssKey, { keypadCode: parsedData.key });
-  }
-}
+console.log('Serveur WebSocket en écoute sur ws://localhost:8000');
 
-// Broadcast Data to WebSocket Clients
-function broadcastToClients(wss, data) {
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(data));
-    }
-  });
-}
-
-
-// Ventilation Control
-let fanState = false;
-function controlVentilation(state) {
-  const command = state ? 'FAN_OFF' : 'FAN_ON';
-  serialPort.write(`${command}\n`, (err) => {
-    if (err) {
-      console.error('Erreur lors de l’écriture sur le port série:', err);
-    } else {
-      fanState = state;
-      console.log(`Commande envoyée : ${command}`);
-    }
-  });
-}*/
 
 
 // Start Express Server
