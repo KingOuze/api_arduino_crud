@@ -8,9 +8,9 @@ const index = async (req, res) => {
 }
 const storeUser = async (req, res) => {
   try {
-    const { nom, prenom, email, password, code, role } = req.body;
+    const { nom, prenom, telephone, email, password, code, role } = req.body;
 
-    if (!nom || !prenom || !email || !password || !code || !role) {
+    if (!nom || !prenom || !email || !password || !code || !role  || !telephone ) {
       return res.status(400).json({ msg: "Données utilisateur incomplètes" });
     }
 
